@@ -262,6 +262,28 @@ xtabs(formula = ~ band + operator, data = all_df) %>%
 
 We made contact with `r length(unique(all_df$call))` stations from `r length(unique(all_df$gridsquare))` grid squares and `r length(unique(all_df$state))` U.S. states or Canadian provinces.
 
+### States and provinces
+
+```{r}
+states_df <- all_df %>%
+  dplyr::filter(., !is.na(state))
+xtabs(formula = ~ state + band, data = states_df) %>%
+  knitr::kable()
+```
+
+### Grid squares
+
+```{r}
+grids_df <- all_df %>%
+  dplyr::filter(., !is.na(gridsquare))
+xtabs(formula = ~ gridsquare + band, data = grids_df) %>%
+  knitr::kable()
+```
+
+```{r, fig.align='center', out.width="100%"}
+knitr::include_graphics("https://qrznow.com/wp-content/uploads/2015/09/QTH_locator.gif")
+```
+
 ## Signal reports
 
 ```{r}
