@@ -206,9 +206,19 @@ dupes <- all_df %>%
   dplyr::mutate(., dup_qsos = n_qsos_in_band - 1) %>%
   dplyr::select(., call, band, n_qsos_in_band, dup_qsos)
 
-all_df <- left_join(all_df, dupes, by = c("call", "band"))
+all_df <- all_df %>%
+  dplyr::group_by(., call, band) %>%
+  dplyr::mutate(., n_qso_w_call = dplyr::row_number())
 
+#all_df <- left_join(all_df, dupes, by = c("call", "band"))
+
+# Total QSOs without filtering dupes
 tot_qsos <- dim(all_df)[1]
+
+# Filter dupes
+all_df <- all_df %>%
+  dplyr::filter(., n_qso_w_call == 1)
+
 dup_qsos <- sum(dupes$dup_qsos)
 ```
 
@@ -239,6 +249,14 @@ all_df <- all_df %>%
 ## Number of unique QSOs
 
 We reported `r tot_qsos` QSOs total, but there were `r dup_qsos` duplicate contacts, so our unique QSO count was `r tot_qsos - dup_qsos`.
+
+## QSOs by band and operator
+
+```{r}
+xtabs(formula = ~ band + operator, data = all_df) %>%
+  knitr::kable()
+```
+
 
 ## Unique stations and locations
 

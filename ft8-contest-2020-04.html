@@ -1595,7 +1595,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">FT8 Contest April 2020</h1>
 <h4 class="author">Rick Gilmore K3ROG</h4>
-<h4 class="date">2020-04-14 13:46:57</h4>
+<h4 class="date">2020-04-14 13:57:22</h4>
 
 </div>
 
@@ -1757,9 +1757,19 @@ n3li_df &lt;-
   dplyr::mutate(., dup_qsos = n_qsos_in_band - 1) %&gt;%
   dplyr::select(., call, band, n_qsos_in_band, dup_qsos)
 
-all_df &lt;- left_join(all_df, dupes, by = c(&quot;call&quot;, &quot;band&quot;))
+all_df &lt;- all_df %&gt;%
+  dplyr::group_by(., call, band) %&gt;%
+  dplyr::mutate(., n_qso_w_call = dplyr::row_number())
 
+#all_df &lt;- left_join(all_df, dupes, by = c(&quot;call&quot;, &quot;band&quot;))
+
+# Total QSOs without filtering dupes
 tot_qsos &lt;- dim(all_df)[1]
+
+# Filter dupes
+all_df &lt;- all_df %&gt;%
+  dplyr::filter(., n_qso_w_call == 1)
+
 dup_qsos &lt;- sum(dupes$dup_qsos)</code></pre>
 <p>Recode sent signals as numbers and dates and times as a date/time stamp.</p>
 <pre class="r"><code>convert_to_date &lt;- function(d) {
@@ -1786,6 +1796,47 @@ all_df &lt;- all_df %&gt;%
 <div id="number-of-unique-qsos" class="section level2">
 <h2>Number of unique QSOs</h2>
 <p>We reported 274 QSOs total, but there were 66 duplicate contacts, so our unique QSO count was 208.</p>
+</div>
+<div id="qsos-by-band-and-operator" class="section level2">
+<h2>QSOs by band and operator</h2>
+<pre class="r"><code>xtabs(formula = ~ band + operator, data = all_df) %&gt;%
+  knitr::kable()</code></pre>
+<table>
+<thead>
+<tr class="header">
+<th></th>
+<th align="right">K3ROG</th>
+<th align="right">N3LI</th>
+<th align="right">W3SWL</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>15m</td>
+<td align="right">6</td>
+<td align="right">1</td>
+<td align="right">8</td>
+</tr>
+<tr class="even">
+<td>20m</td>
+<td align="right">33</td>
+<td align="right">32</td>
+<td align="right">52</td>
+</tr>
+<tr class="odd">
+<td>40m</td>
+<td align="right">28</td>
+<td align="right">37</td>
+<td align="right">24</td>
+</tr>
+<tr class="even">
+<td>80m</td>
+<td align="right">8</td>
+<td align="right">43</td>
+<td align="right">2</td>
+</tr>
+</tbody>
+</table>
 </div>
 <div id="unique-stations-and-locations" class="section level2">
 <h2>Unique stations and locations</h2>
