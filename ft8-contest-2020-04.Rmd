@@ -1,0 +1,300 @@
+---
+title: "FT8 Contest April 2020"
+author: "Rick Gilmore K3ROG"
+date: "`r Sys.time()`"
+output: 
+  html_document:
+    toc: true
+    toc_levels: 2
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE, warning = FALSE)
+
+library(tidyverse)
+library(googledrive)
+library(readtext)
+```
+
+# Purpose
+
+This document summarizes the results from the 2020-04-11 to 2020-04-12 FT8 contest that N3LI, W3SWL, and K3ROG participated in from their home stations. We shared use of the W3YA callsign.
+
+# Log processing
+
+We exported ADIF format logs from WSJT-X.
+The logs are available on Google Drive.
+
+## Authenticate to Google Drive
+
+We use the `googledrive` (https://googledrive.tidyverse.org/) package.
+Running the following command will launch a browser where you must authenticate to Google using the credentials for the account you use to access these files.
+
+We all uploaded ADIF files with the same general pattern: `W3YA_K3ROG_all.adi`, so we can search for that pattern.
+
+```{r googledrive}
+if (!is.null(dim(list.files(".", pattern = "\\.adf$")))) {
+  log_files <- googledrive::drive_find(pattern = "_all.adi")
+}
+```
+
+## Downloading ADIF logs
+
+We extract the file information by detecting the callsign in the `name` field.
+
+```{r download-googledrive}
+if (!is.null(dim(list.files(".", pattern = "\\.adf$")))) {
+  k3rog_log <- log_files %>%
+    dplyr::filter(., stringr::str_detect(name, "K3ROG"))
+  
+  w3swl_log <- log_files %>%
+    dplyr::filter(., stringr::str_detect(name, "W3SWL"))
+  
+  n3li_log <- log_files %>%
+    dplyr::filter(., stringr::str_detect(name, "N3LI"))
+}
+```
+
+Now, we can download each of the logs.
+   
+```{r download-adif}
+if (!is.null(dim(list.files(".", pattern = "\\.adf$")))) {
+  googledrive::drive_download(k3rog_log, overwrite = TRUE)
+  googledrive::drive_download(w3swl_log, overwrite = TRUE)
+  googledrive::drive_download(n3li_log, overwrite = TRUE)
+}
+```
+
+I tried to specify a particular output directory using the `path` option, but got the following type of error:
+
+`Error in curl::curl_fetch_disk(url, x$path, handle = handle) : 
+  Failed to open file adif/test.txt.`
+  
+## Importing
+
+### Loading helper functions
+
+```{r define-helpers}
+read_adif <- function(fn) {
+  if (!file.exists(fn)) stop("file '", fn, "' not found.")
+  readtext(file = fn, )
+}
+
+read_adif <- function(fn) {
+  if (!file.exists(fn)) stop("file '", fn, "' not found.")
+  readtext(file = fn, )
+}
+
+extract_qsos_from_adif <- function(adif) {
+  unlist(stringr::str_match_all(adif, "<.*<eor>\n"))
+}
+
+extract_qso_fields <- function(qso_line) {
+  if (!is.character(qso_line)) stop("'qso_line' must be character.")
+  field_label_value_regex <- "<([a-z]+[_a-z]*):([0-9]+)>([a-zA-Z0-9/\\.]+)"
+  df <- as.data.frame(stringr::str_match_all(qso_line, field_label_value_regex))
+  
+  if (is.null(df)) {
+    stop("No fields matched.")
+  }
+  
+  if (dim(df)[2] != 4) {
+    stop("Extracted data frame does not have expected number of columns.")
+  }
+  df[, c(2,4)]
+}
+
+make_qso_wide <- function(qso_df) {
+  tidyr::pivot_wider(qso_df, names_from = X2, values_from = X4)
+}
+
+make_wide_qso_df <- function(qso_line) {
+  df <- extract_qso_fields(qso_line)
+  make_qso_wide(df)
+}
+
+make_qsos_df <- function(adif) {
+  qsos <- extract_qsos_from_adif(adif)
+  purrr::map_df(qsos, make_wide_qso_df)
+}
+
+convert_db_to_rst <- function(rpt) {
+  if (is.na(rpt) || rpt > 500) {
+    as.character(rpt)
+  } else {
+    noise_floor <- -26
+    db_to_s_units <- 6
+    paste0("5", round((rpt - noise_floor)/6), "9")     
+  }
+}
+```
+
+
+### Loading data files
+
+```{r load-adifs}
+if (!is.null(dim(list.files(".", pattern = "\\.adf$")))) {
+  k3rog_adif <- read_adif(k3rog_log$name)
+  w3swl_adif <- read_adif(w3swl_log$name)
+  n3li_adif <- read_adif(n3li_log$name)
+} else {
+  adif_fl <- list.files(".", pattern = "\\.adi$")
+  k3rog_adif <- read_adif(adif_fl[stringr::str_detect(adif_fl, "K3ROG")])
+  w3swl_adif <- read_adif(adif_fl[stringr::str_detect(adif_fl, "W3SWL")])
+  n3li_adif <- read_adif(adif_fl[stringr::str_detect(adif_fl, "N3LI")])
+}
+```
+
+### Convert to data frames
+
+```{r make-qso-dataframes}
+k3rog_df <- make_qsos_df(k3rog_adif)
+w3swl_df <- make_qsos_df(w3swl_adif)
+n3li_df <- make_qsos_df(n3li_adif)
+```
+
+## Cleaning
+
+```{r clean-indiv-logs}
+w3swl_df <- dplyr::select(w3swl_df,-`tx_pwr`)
+
+n3li_df <- dplyr::select(n3li_df,-`tx_pwr`)
+n3li_df$operator <- "N3LI"
+n3li_df <- dplyr::select(
+  n3li_df,
+  qso_date,
+  time_on,
+  qso_date_off,
+  time_off,
+  band,
+  freq,
+  station_callsign,
+  my_gridsquare,
+  call,
+  rst_sent,
+  rst_rcvd,
+  srx,
+  state,
+  operator
+)
+# Convert signal reports
+n3li_df <-
+  dplyr::mutate(n3li_df,
+                rst_sent = convert_db_to_rst(as.numeric(rst_sent)),
+                rst_rcvd = convert_db_to_rst(as.numeric(rst_rcvd)))
+```
+
+Create combined data frame and filter based on key fields.
+
+```{r create-single-df}
+all_df <- dplyr::full_join(k3rog_df, w3swl_df)
+all_df <- dplyr::full_join(all_df, n3li_df)
+
+all_df <- all_df %>%
+  dplyr::arrange(., call, band, qso_date, time_on, band) %>%
+  dplyr::filter(., stringr::str_detect(qso_date, '2020041[12]'))
+```
+
+Address dupes.
+
+```{r detect-dupes}
+dupes <- all_df %>%
+  dplyr::group_by(., call, band) %>%
+  dplyr::summarize(., n_qsos_in_band = n()) %>%
+  dplyr::mutate(., dup_qsos = n_qsos_in_band - 1) %>%
+  dplyr::select(., call, band, n_qsos_in_band, dup_qsos)
+
+all_df <- left_join(all_df, dupes, by = c("call", "band"))
+
+tot_qsos <- dim(all_df)[1]
+dup_qsos <- sum(dupes$dup_qsos)
+```
+
+Recode sent signals as numbers and dates and times as a date/time stamp.
+
+```{r}
+convert_to_date <- function(d) {
+  paste0(substr(d, 1, 4), "-", substr(d, 5, 6), "-", substr(d, 7, 8))
+}
+
+convert_to_time <- function(t) {
+  tp <- str_pad(t, 6, pad = "0")
+  paste0(substr(t, 1, 2), ":", substr(t, 3, 4), ":", substr(t, 5, 6))
+}
+
+all_df <- all_df %>%
+  dplyr::mutate(.,
+                rst_rcvd = as.numeric(rst_rcvd),
+                rst_sent = as.numeric(rst_sent)) %>%
+  dplyr::mutate(.,
+                date_time = lubridate::as_datetime(paste0(
+                  convert_to_date(qso_date), " ", convert_to_time(time_on)
+                )))
+```
+
+# Analysis and visualization
+
+## Number of unique QSOs
+
+We reported `r tot_qsos` QSOs total, but there were `r dup_qsos` duplicate contacts, so our unique QSO count was `r tot_qsos - dup_qsos`.
+
+## Unique stations and locations
+
+We made contact with `r length(unique(all_df$call))` stations from `r length(unique(all_df$gridsquare))` grid squares and `r length(unique(all_df$state))` U.S. states or Canadian provinces.
+
+## Signal reports
+
+```{r}
+all_df %>% ggplot(.) +
+  aes(x = rst_sent, y = rst_rcvd, color = band) +
+  geom_smooth() +
+  geom_point(position = position_jitter(w = 0.55, h=0.5), alpha = .5) +
+  facet_grid(band ~ operator)
+```
+
+### Received
+
+```{r}
+all_df %>% ggplot(.) +
+  aes(x = rst_rcvd, fill = band) +
+  geom_bar() +
+  facet_grid(band ~ .)
+```
+
+### Sent
+
+```{r}
+all_df %>% ggplot(.) +
+  aes(x = rst_sent, fill = band) +
+  geom_bar() +
+  facet_grid(band ~ .)
+```
+
+## Time
+
+The following plots show the intensity of QSOs across time.
+These plots include duplicates.
+
+```{r}
+all_df <- all_df %>%
+  dplyr::arrange(., date_time) %>%
+  dplyr::group_by(., band) %>%
+  dplyr::mutate(., cum_qso_cnt = dplyr::row_number()) %>%
+  ungroup()
+```
+
+```{r}
+all_df %>% ggplot(.) +
+  aes(date_time, cum_qso_cnt, color = band) +
+  geom_point() +
+  facet_grid(operator ~ .)
+```
+
+```{r}
+all_df %>% ggplot(.) +
+  aes(date_time, cum_qso_cnt, color = band) +
+  geom_point()
+```
+
